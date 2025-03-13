@@ -12,45 +12,50 @@
 // common_write_fd      – deskryptor do zapisu odpowiedzi do wspólnego potoku
 void child_work(int teacher_to_child_fd, int common_write_fd) {
     char buffer[256];
-    // Odczyt komunikatu od nauczyciela
+    // Studenci najpierw wypisują swój PID
+    printf("Student: %d\n", getpid());
+    fflush(stdout);
+
+    // Odczytanie zapytania od nauczyciela z indywidualnego potoku
     ssize_t count = read(teacher_to_child_fd, buffer, sizeof(buffer) - 1);
-    if (count < 0) ERR("child read");
+    if (count < 0)
+        ERR("child read");
     buffer[count] = '\0';
-    // Możemy opcjonalnie coś zrobić z odebranym komunikatem (tutaj nie jest to wymagane)
+    // Możemy opcjonalnie przetworzyć odebrany komunikat, ale w tym zadaniu nie jest to konieczne
 
     // Przygotowanie odpowiedzi
-    pid_t pid = getpid();
     char response[256];
-    snprintf(response, sizeof(response), "Student %d: HERE", pid);
+    snprintf(response, sizeof(response), "Student %d: HERE!", getpid());
     // Wypisanie odpowiedzi na standardowe wyjście
     printf("%s\n", response);
     fflush(stdout);
     // Wysłanie odpowiedzi do nauczyciela przez wspólny potok
     if (write(common_write_fd, response, strlen(response) + 1) < 0)
         ERR("child write to common pipe");
-    
-    // Zamykamy deskryptory i kończymy działanie
+
     close(teacher_to_child_fd);
     close(common_write_fd);
     exit(EXIT_SUCCESS);
 }
 
 // Funkcja wykonywana przez proces główny (nauczyciel)
-// n – liczba studentów
 void teacher_work(int n) {
     int common_pipe[2]; // Wspólny potok: studenci -> nauczyciel
     if (pipe(common_pipe) < 0)
         ERR("pipe common");
 
-    // Alokacja tablic na PID studentów oraz indywidualne potoki (deskryptory do zapisu)
+    // Alokacja tablic na PID studentów oraz indywidualne deskryptory zapisu do potoków
     pid_t *child_pids = malloc(n * sizeof(pid_t));
-    if (child_pids == NULL) ERR("malloc");
+    if (child_pids == NULL)
+        ERR("malloc child_pids");
     int *teacher_to_child_fds = malloc(n * sizeof(int));
-    if (teacher_to_child_fds == NULL) ERR("malloc");
+    if (teacher_to_child_fds == NULL)
+        ERR("malloc teacher_to_child_fds");
 
-    // Tworzymy procesy studentów
+    // Tworzenie procesów studentów
     for (int i = 0; i < n; i++) {
-        int indiv_pipe[2]; // Indywidualny potok dla danego studenta: [0] – odczyt w dziecku, [1] – zapis w nauczycielu
+        int indiv_pipe[2]; // Indywidualny potok dla danego studenta:
+                           // [0] – odczyt w procesie dziecka, [1] – zapis w procesie nauczyciela
         if (pipe(indiv_pipe) < 0)
             ERR("pipe individual");
 
@@ -59,41 +64,48 @@ void teacher_work(int n) {
             ERR("fork");
         } else if (pid == 0) {
             // Proces potomny (student)
-            // W dziecku zamykamy niepotrzebny koniec zapisu indywidualnego potoku oraz odczyt wspólnego potoku
-            close(indiv_pipe[1]);
-            close(common_pipe[0]); // Dziecko nie odczytuje z potoku wspólnego
+            close(indiv_pipe[1]);      // Dziecko nie potrzebuje końca zapisu indywidualnego
+            close(common_pipe[0]);       // Dziecko nie odczytuje z wspólnego potoku
             child_work(indiv_pipe[0], common_pipe[1]);
-            // Funkcja child_work() nigdy nie zwraca
+            // child_work() nigdy nie zwróci
         } else {
             // Proces nauczyciela
             child_pids[i] = pid;
-            teacher_to_child_fds[i] = indiv_pipe[1]; // Zapisujemy koniec zapisu, którym będziemy wysyłać komunikaty
+            teacher_to_child_fds[i] = indiv_pipe[1]; // Zapamiętujemy koniec zapisu, przez który będziemy wysyłać zapytania
             close(indiv_pipe[0]); // Nauczyciel nie korzysta z końca odczytu indywidualnego potoku
         }
     }
-    // Nauczyciel nie potrzebuje zapisywać do wspólnego potoku, dlatego zamykamy jego zapis
+    // Nauczyciel nie korzysta z zapisu we wspólnym potoku
     close(common_pipe[1]);
 
-    // Wysyłanie komunikatu sprawdzającego obecność do każdego studenta
-    for (int i = 0; i < n; i++) {
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Teacher: Is %d here?", child_pids[i]);
-        // Wypisanie komunikatu na standardowe wyjście
-        printf("%s\n", msg);
-        fflush(stdout);
-        // Wysłanie komunikatu przez indywidualny potok do studenta
-        if (write(teacher_to_child_fds[i], msg, strlen(msg) + 1) < 0)
-            ERR("teacher write to individual pipe");
-        close(teacher_to_child_fds[i]); // Po wysłaniu komunikatu zamykamy deskryptor
-    }
+    // Opcjonalny delay, aby studenci zdążyli wypisać swoje PID
+    sleep(1);
 
-    // Odbieramy odpowiedzi od studentów przez wspólny potok
+    // Nauczyciel wypisuje swój PID
+    printf("Teacher: %d\n", getpid());
+    fflush(stdout);
+
+    char query[256];
+    char response[256];
+
+    // Dla każdego studenta wysyłamy zapytanie i odbieramy odpowiedź
     for (int i = 0; i < n; i++) {
-        char response[256];
-        ssize_t count = read(common_pipe[0], response, sizeof(response));
+        snprintf(query, sizeof(query), "Teacher: Is %d here?", child_pids[i]);
+        // Wypisanie zapytania na standardowe wyjście
+        printf("%s\n", query);
+        fflush(stdout);
+        // Wysłanie zapytania do konkretnego studenta przez indywidualny potok
+        if (write(teacher_to_child_fds[i], query, strlen(query) + 1) < 0)
+            ERR("teacher write to individual pipe");
+        close(teacher_to_child_fds[i]);
+
+        // Odbieranie odpowiedzi ze wspólnego potoku
+        ssize_t count = read(common_pipe[0], response, sizeof(response) - 1);
         if (count < 0)
             ERR("teacher read common pipe");
+        response[count] = '\0';
         printf("Received: %s\n", response);
+        fflush(stdout);
     }
     close(common_pipe[0]);
 
