@@ -1,0 +1,78 @@
+private string lastLoadedFile = "";
+
+private void LoadToolStripMenuItem_Click(object sender, EventArgs e)
+{
+    using (OpenFileDialog openFileDialog = new OpenFileDialog())
+    {
+        openFileDialog.Filter = "CSV Files (*.csv)|*.csv";
+        if (openFileDialog.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                // Zapisz lokalizację ostatnio wczytanego pliku
+                lastLoadedFile = openFileDialog.FileName;
+                // Odczytaj wszystkie linie z pliku
+                string[] lines = System.IO.File.ReadAllLines(openFileDialog.FileName);
+                // Wyczyść ListView
+                tasksListView.Items.Clear();
+
+                foreach (string line in lines)
+                {
+                    // Zakładamy, że poszczególne dane oddzielone są przecinkiem
+                    string[] parts = line.Split(',');
+                    if (parts.Length >= 2)
+                    {
+                        // Utwórz nowy element ListView (pierwsza kolumna: data, druga: opis)
+                        ListViewItem item = new ListViewItem(parts[0].Trim());
+                        item.SubItems.Add(parts[1].Trim());
+                        // Opcjonalnie, jeśli istnieje trzecia kolumna np. status zadania
+                        if (parts.Length > 2)
+                            item.SubItems.Add(parts[2].Trim());
+                        tasksListView.Items.Add(item);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Błąd podczas wczytywania pliku: " + ex.Message, "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+}
+
+
+private void SaveToolStripMenuItem_Click(object sender, EventArgs e)
+{
+    using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+    {
+        saveFileDialog.Filter = "CSV Files (*.csv)|*.csv";
+        // Ustaw domyślną lokalizację, jeśli był wcześniej wczytany plik
+        if (!string.IsNullOrEmpty(lastLoadedFile))
+            saveFileDialog.FileName = lastLoadedFile;
+        
+        if (saveFileDialog.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                List<string> lines = new List<string>();
+                foreach (ListViewItem item in tasksListView.Items)
+                {
+                    // Łączymy wszystkie kolumny rozdzielone przecinkiem
+                    List<string> subItems = new List<string>();
+                    foreach (ListViewItem.ListViewSubItem subItem in item.SubItems)
+                    {
+                        // Opcjonalnie: dodaj cudzysłowy, jeśli tekst zawiera przecinek
+                        subItems.Add(subItem.Text);
+                    }
+                    string line = string.Join(",", subItems);
+                    lines.Add(line);
+                }
+                System.IO.File.WriteAllLines(saveFileDialog.FileName, lines);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Błąd podczas zapisywania pliku: " + ex.Message, "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+}
