@@ -1,0 +1,82 @@
+private string lastLoadedFile = "";
+
+private void LoadToolStripMenuItem_Click(object sender, EventArgs e)
+{
+    using (OpenFileDialog openFileDialog = new OpenFileDialog())
+    {
+        openFileDialog.Filter = "CSV Files (*.csv)|*.csv";
+        if (openFileDialog.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                lastLoadedFile = openFileDialog.FileName;
+                string[] lines = System.IO.File.ReadAllLines(openFileDialog.FileName);
+                tasksListView.Items.Clear();
+
+                foreach (string line in lines)
+                {
+                    string[] parts = line.Split(',');
+                    if (parts.Length >= 3)
+                    {
+                        // Pierwsza kolumna – data
+                        ListViewItem item = new ListViewItem(parts[0].Trim());
+                        // Druga kolumna – opis zadania
+                        item.SubItems.Add(parts[1].Trim());
+                        // Trzecia kolumna – status (Done)
+                        bool isDone = false;
+                        bool.TryParse(parts[2].Trim(), out isDone);
+                        item.Checked = isDone;
+                        tasksListView.Items.Add(item);
+                    }
+                    else if (parts.Length == 2)
+                    {
+                        // Jeśli status nie został zapisany, domyślnie ustawiamy false
+                        ListViewItem item = new ListViewItem(parts[0].Trim());
+                        item.SubItems.Add(parts[1].Trim());
+                        item.Checked = false;
+                        tasksListView.Items.Add(item);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Błąd podczas wczytywania pliku: " + ex.Message, "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+}
+
+
+private void SaveToolStripMenuItem_Click(object sender, EventArgs e)
+{
+    using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+    {
+        saveFileDialog.Filter = "CSV Files (*.csv)|*.csv";
+        if (!string.IsNullOrEmpty(lastLoadedFile))
+            saveFileDialog.FileName = lastLoadedFile;
+        
+        if (saveFileDialog.ShowDialog() == DialogResult.OK)
+        {
+            try
+            {
+                List<string> lines = new List<string>();
+                foreach (ListViewItem item in tasksListView.Items)
+                {
+                    List<string> subItems = new List<string>
+                    {
+                        item.Text, // Data
+                        item.SubItems.Count > 1 ? item.SubItems[1].Text : "", // Opis zadania
+                        item.Checked.ToString() // Status: true/false
+                    };
+                    string line = string.Join(",", subItems);
+                    lines.Add(line);
+                }
+                System.IO.File.WriteAllLines(saveFileDialog.FileName, lines);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Błąd podczas zapisywania pliku: " + ex.Message, "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+    }
+}
