@@ -120,6 +120,3 @@
 8.3. Upewnij się, że właściwości i logika przelewania płynu działają spójnie przy zmianie rozmiaru okna – wykorzystaj zdarzenie Resize, jeśli to konieczne.
 8.4. Na każdym etapie warto dodawać logi lub tymczasowe komunikaty, aby łatwiej zlokalizować ewentualne błędy.
 
-=========================================================
-Koniec instrukcji implementacji "Potion Master"
-=========================================================
