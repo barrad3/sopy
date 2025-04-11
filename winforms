@@ -1,0 +1,263 @@
+# Krok po kroku – Implementacja
+
+## 1. Stworzenie projektu i konfiguracja okna głównego
+1.1 **Utwórz projekt Windows Forms:**
+   - W Visual Studio wybierz **File → New → Project...**.
+   - Wybierz szablon **Windows Forms App** (lub **Windows Forms App (.NET Framework)**).
+   - Nadaj projektowi nazwę, np. *PotionMaster*.
+
+1.2 **Konfiguracja właściwości głównego okna (Form1):**
+   - Ustaw tytuł okna: `this.Text = "Potion Master";`
+   - Ustaw rozmiar okna: `this.Size = new Size(800, 500);`
+   - Ustaw minimalny rozmiar:
+     ```csharp
+     this.MinimumSize = new Size(500, 300);
+     ```
+   - Ustaw początkową lokalizację na środek ekranu:
+     ```csharp
+     this.StartPosition = FormStartPosition.CenterScreen;
+     ```
+
+1.3 **Dodanie MenuStrip:**
+   - Przeciągnij kontrolkę **MenuStrip** z ToolBoxa na okno.
+   - Utwórz menu główne z dwoma pozycjami: **File** i **Settings**.
+   - W menu **File** dodaj 3 elementy: **New Game**, **Surrender** oraz **Exit Game**.
+   - W menu **Settings** dodaj 1 element: **Open Settings...**.
+   - Elementy te możesz dodać zarówno w Designerze, jak i programowo.
+
+1.4 **Podział głównego obszaru gry na 4 sekcje:**
+   - Użyj kontrolki **TableLayoutPanel**:
+     - Ustaw `ColumnCount = 4` i `RowCount = 1`.
+     - Ustaw właściwość `Dock = Fill`, aby panel zajmował cały obszar okna (poniżej MenuStrip).
+     - W każdej komórce umieść instancję niestandardowej kontrolki `VialControl`.
+
+---
+
+## 2. Tworzenie kontrolki VialControl (UserControl)
+2.1 **Dodaj nowy element typu UserControl:**
+   - Kliknij prawym przyciskiem na projekt → **Add → New Item...** → **User Control**.
+   - Nazwij go np. `VialControl.cs`.
+
+2.2 **Definiowanie właściwości kontrolki:**
+   Przykładowa implementacja w C#:
+   ```csharp
+   public partial class VialControl : UserControl
+   {
+       // Maksymalna liczba segmentów w fiolce
+       [Browsable(true)]
+       [Category("Vial Properties")]
+       [Description("Maksymalna liczba segmentów w fiolce.")]
+       public int MaxSegments { get; set; } = 5;
+
+       // Początkowa liczba wypełnionych segmentów
+       [Browsable(true)]
+       [Category("Vial Properties")]
+       [Description("Początkowa liczba segmentów w fiolce.")]
+       public int InitSegmentCount { get; set; } = 3;
+
+       // Kolekcja segmentów z kolorami
+       private List<Color> segments = new List<Color>();
+
+       [Browsable(true)]
+       [Category("Vial Properties")]
+       [Description("Segmenty koloru w fiolce.")]
+       public List<Color> Segments
+       {
+           get => segments;
+           set
+           {
+               segments = value;
+               Invalidate(); // Wymuszenie ponownego rysowania kontrolki
+           }
+       }
+
+       public VialControl()
+       {
+           InitializeComponent();
+           this.Size = new Size(80, 200); // Przykładowy rozmiar kontrolki
+           this.DoubleBuffered = true; // Zmniejsza migotanie przy rysowaniu
+       }
+
+       private void VialControl_Load(object sender, EventArgs e)
+       {
+           // Jeśli Segments nie jest ustawione z zewnątrz,
+           // wypełnij je losowymi kolorami według InitSegmentCount
+           if (Segments.Count == 0 && InitSegmentCount > 0)
+           {
+               Random rand = new Random();
+               for (int i = 0; i < InitSegmentCount; i++)
+               {
+                   Segments.Add(GenerateRandomColor(rand));
+               }
+           }
+       }
+
+       private Color GenerateRandomColor(Random rand)
+       {
+           return Color.FromArgb(rand.Next(256), rand.Next(256), rand.Next(256));
+       }
+   }
+  2.3 Implementacja rysowania kontrolki (OnPaint): Nadpisz metodę OnPaint(PaintEventArgs e), aby narysować fiolkę podzieloną na segmenty:
+    protected override void OnPaint(PaintEventArgs e)
+    {
+    base.OnPaint(e);
+
+    // Obszar rysowania fiolki
+    Rectangle vialRect = new Rectangle(10, 10, this.Width - 20, this.Height - 20);
+    // Rysowanie obrysu fiolki
+    using (Pen pen = new Pen(Color.Black, 2))
+    {
+        e.Graphics.DrawRectangle(pen, vialRect);
+    }
+
+    if (MaxSegments <= 0) return;
+
+    // Wysokość jednego segmentu
+    float segmentHeight = (float)vialRect.Height / MaxSegments;
+
+    // Rysowanie wypełnionych segmentów – od dołu do góry
+    int filledSegments = Segments.Count;
+    for (int i = 0; i < filledSegments; i++)
+    {
+        int segmentIndexFromBottom = filledSegments - 1 - i;
+        float y = vialRect.Bottom - segmentHeight * (i + 1);
+        RectangleF segmentRect = new RectangleF(vialRect.Left, y, vialRect.Width, segmentHeight);
+
+        using (SolidBrush brush = new SolidBrush(Segments[segmentIndexFromBottom]))
+        {
+            e.Graphics.FillRectangle(brush, segmentRect);
+        }
+    }
+}
+2.4 Obsługa przeciągania i upuszczania (Drag & Drop): Dodaj obsługę zdarzeń MouseDown, DragEnter oraz DragDrop:
+    // Rozpoczęcie przeciągania przy kliknięciu
+    protected override void OnMouseDown(MouseEventArgs e)
+{
+    base.OnMouseDown(e);
+    // Rozpocznij operację Drag & Drop, przesyłając referencję do tej kontrolki
+    DoDragDrop(this, DragDropEffects.Move);
+}
+
+// Obsługa zdarzenia DragEnter – akceptacja przeciąganego obiektu
+protected override void OnDragEnter(DragEventArgs drgevent)
+{
+    base.OnDragEnter(drgevent);
+    if (drgevent.Data.GetDataPresent(typeof(VialControl)))
+    {
+        drgevent.Effect = DragDropEffects.Move;
+    }
+    else
+    {
+        drgevent.Effect = DragDropEffects.None;
+    }
+}
+
+// Obsługa zdarzenia DragDrop – wykonanie przelewania płynu
+protected override void OnDragDrop(DragEventArgs drgevent)
+{
+    base.OnDragDrop(drgevent);
+    if (drgevent.Data.GetDataPresent(typeof(VialControl)))
+    {
+        VialControl sourceVial = drgevent.Data.GetData(typeof(VialControl)) as VialControl;
+        if (sourceVial != null && sourceVial != this)
+        {
+            PourFrom(sourceVial);
+        }
+    }
+}
+
+3. Logika przelewania – metoda PourFrom
+  Implementacja metody odpowiedzialnej za przelewanie płynu:
+    private void PourFrom(VialControl source)
+{
+    // Jeśli fiolka źródłowa jest pusta, kończymy operację.
+    if (source.Segments.Count == 0) return;
+
+    // Pobierz kolor, który znajduje się na górze fiolki źródłowej.
+    Color topColor = source.Segments[source.Segments.Count - 1];
+
+    // Zlicz, ile segmentów o tym samym kolorze występuje kolejno od góry.
+    int countSameColor = 1;
+    for (int i = source.Segments.Count - 2; i >= 0; i--)
+    {
+        if (source.Segments[i] == topColor) countSameColor++;
+        else break;
+    }
+
+    // Sprawdź, czy w bieżącej fiolce (docelowej) jest miejsce.
+    int spaceLeft = MaxSegments - Segments.Count;
+    if (spaceLeft == 0)
+    {
+        // Brak miejsca – przelewanie nie jest możliwe.
+        return;
+    }
+
+    // Sprawdź, czy fiolka docelowa jest pusta lub jej górny segment ma ten sam kolor.
+    if (Segments.Count > 0)
+    {
+        Color targetTopColor = Segments[Segments.Count - 1];
+        if (targetTopColor != topColor)
+        {
+            // Kolory nie pasują – nie przelewamy.
+            return;
+        }
+    }
+
+    // Określ, ile segmentów możemy przelać (maksymalnie tyle, ile pasuje lub tyle, ile jest dostępne).
+    int amountToPour = Math.Min(countSameColor, spaceLeft);
+
+    // Przenieś segmenty z fiolki źródłowej do docelowej.
+    for (int i = 0; i < amountToPour; i++)
+    {
+        source.Segments.RemoveAt(source.Segments.Count - 1);
+        Segments.Add(topColor);
+    }
+
+    // Odśwież obie kontrolki, aby pokazały nowy stan.
+    source.Invalidate();
+    this.Invalidate();
+}
+
+4. Dodanie instancji kontrolek VialControl do okna głównego
+    4.1 Dodanie kontrolek na TableLayoutPanel (w Form1): W metodzie Form1_Load można dodać instancje kontrolek:
+      private void Form1_Load(object sender, EventArgs e)
+{
+    // Przykładowo, zakładamy, że tableLayoutPanel1 to nasz TableLayoutPanel z 4 kolumnami.
+    VialControl vial1 = new VialControl() { MaxSegments = 5, InitSegmentCount = 3 };
+    VialControl vial2 = new VialControl() { MaxSegments = 5, InitSegmentCount = 2 };
+    VialControl vial3 = new VialControl() { MaxSegments = 5, InitSegmentCount = 3 };
+    VialControl vial4 = new VialControl() { MaxSegments = 5, InitSegmentCount = 0 }; // Pusta fiolka
+
+    // Umożliwienie operacji DragDrop
+    vial1.AllowDrop = true;
+    vial2.AllowDrop = true;
+    vial3.AllowDrop = true;
+    vial4.AllowDrop = true;
+
+    // Dodajemy fiolki do kontrolki TableLayoutPanel
+    tableLayoutPanel1.Controls.Add(vial1, 0, 0);
+    tableLayoutPanel1.Controls.Add(vial2, 1, 0);
+    tableLayoutPanel1.Controls.Add(vial3, 2, 0);
+    tableLayoutPanel1.Controls.Add(vial4, 3, 0);
+}
+    4.2 Ustawienie wyrównania wewnątrz TableLayoutPanel:
+        - Upewnij się, że właściwości Anchor lub Dock są ustawione tak, aby fiolki były wyśrodkowane.
+        - W TableLayoutPanel możesz ustawić każdej komórce style wyśrodkowania albo manualnie przeliczać położenie fiolek podczas zmiany rozmiaru okna.
+
+5. Obsługa zmiany rozmiaru okna
+  - Korzystając z TableLayoutPanel z ustawionym Dock = Fill i kolumnami o stylu Percent (np. 25% każda), kontrolki automatycznie będą rozmieszczane proporcjonalnie przy zmianie rozmiaru okna.
+  - W razie potrzeby możesz obsłużyć zdarzenie Form.Resize lub ResizeEnd i ręcznie dostosować położenie i rozmiar fiolek.
+6. Implementacja przycisków w MenuStrip (New Game, Surrender, Exit Game, Open Settings...)
+  6.1 New Game:
+      - Możesz wyczyścić obszar gry i ponownie utworzyć konfigurację fiolek (np. wywołując metodę InitializeGame()).
+  6.2 Surrrender:
+      - Wyświetl komunikat, np. MessageBox.Show("You surrendered!") i zablokuj dalsze akcje lub zakończ grę.
+  6.3 Exit Game:
+      - Użyj Application.Exit(); aby zamknąć aplikację.
+  6.4 Open Settings...:
+      - Utwórz dodatkowy formularz (np. SettingsForm) i wywołaj go przy kliknięciu:
+          SettingsForm settingsForm = new SettingsForm();
+          settingsForm.ShowDialog();
+
+
+
