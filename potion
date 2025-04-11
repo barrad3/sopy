@@ -1,0 +1,125 @@
+
+1. Utworzenie projektu
+----------------------
+1.1. Uruchom Visual Studio i utwórz nowy projekt typu "Windows Forms App" (C#).
+1.2. Nazwij projekt np. "PotionMaster".
+1.3. Skonfiguruj główne okno (Form1) ustawiając:
+    - Rozmiar: 800 x 500 px
+    - MinimumSize: 500 x 300 px
+    - StartPosition: CenterScreen
+    - Title (Text): "Potion Master"
+
+2. Layout głównego okna
+-----------------------
+2.1. Dodaj MenuStrip:
+    - Przeciągnij kontrolkę MenuStrip na Form1.
+    - W menu dodaj dwa główne elementy:
+          a) "File" z podmenu:
+              - "New Game"
+              - "Surrender"
+              - "Exit Game"
+          b) "Settings" z podmenu:
+              - "Open Settings..."
+2.2. Utwórz główny obszar gry – podzielony na 4 równe części:
+    - Możesz to zrobić przy pomocy kontrolki TableLayoutPanel ustawionej na 2 kolumny i 2 wiersze.
+    - Ustaw Dock = Fill, aby wypełniło cały obszar pozostały po MenuStrip.
+2.3. W każdej komórce TableLayoutPanel umieść kontrolkę odpowiadającą fiolce (Vial Control),
+      przy czym:
+    - Kontrolki te nie mogą być zmieniane rozmiarowo (ustal rozmiar w Designerze).
+    - Umieść je centralnie w obrębie komórki (ustaw Anchor lub użyj panelu pomocniczego z ustawieniem Dock = None oraz Center alignment).
+
+3. Implementacja custom control – VialControl
+---------------------------------------------
+3.1. Utwórz nowy UserControl:
+    - W projekcie dodaj nowy element typu "UserControl" i nazwij go "VialControl".
+3.2. Dodaj właściwości (dostępne i edytowalne z Properties Window):
+    - public int MaxSegments { get; set; } 
+      // Określa liczbę segmentów (części) fiolki, czyli ile części płynu może się w niej zmieścić.
+    - public int InitSegmentCount { get; set; }
+      // Początkowa liczba wypełnionych segmentów, używana gdy właściwość Segments nie jest ustawiona.
+    - public List<Color> Segments { get; set; }
+      // Kolekcja kolorowych segmentów (wypełnienie fiolki). Gdy nie jest null – InitSegmentCount jest ignorowane.
+    - (Opcjonalnie, dodaj atrybuty [Browsable(true)] dla lepszej widoczności w Designerze.)
+3.3. Rysowanie VialControl (override OnPaint):
+    - Zaimplementuj metodę OnPaint, aby narysować długi, pionowy prostokąt.
+    - Podziel prostokąt na MaxSegments równych części (użyj np. Graphics.DrawRectangle oraz Graphics.FillRectangle).
+    - Dla każdego segmentu pobierz kolor z kolekcji Segments (lub, gdy Segments nie ma wartości, użyj losowych kolorów dla InitSegmentCount).
+3.4. Dodaj obsługę zdarzeń drag & drop dla przelewania płynu:
+    - W zdarzeniu MouseDown rozpocznij operację przeciągania (użyj DoDragDrop) przekazując informacje o płynie:
+          a) Kolor płynu (np. kolor segmentu, który znajduje się na szczycie fiolki).
+          b) Maksymalna liczba segmentów o tym samym kolorze, jakie można przelewać.
+    - W metodzie DragEnter sprawdź, czy przesyłane dane mają poprawny format (np. typ Color lub dedykowaną strukturę).
+    - W metodzie DragDrop w kontrolce docelowej:
+          a) Sprawdź, czy fiolka docelowa posiada wolne miejsce (puste segmenty).
+          b) Jeśli fiolka jest pusta lub na górze znajduje się ten sam kolor – wykonaj operację przelewania:
+              - Przelej maksymalną liczbę segmentów o danym kolorze (nie możesz przelewać częściowo).
+              - Aktualizuj właściwość Segments zarówno dla fiolki źródłowej, jak i docelowej.
+          c) Po zmianie, wywołaj Invalidate(), aby odświeżyć rysowanie kontrolki.
+
+4. Obsługa menu w głównym oknie
+--------------------------------
+4.1. "File" → "New Game":
+    - Resetuj układ fiolkowy, losuj kolory oraz ustaw ilości wypełnienia początkowego we wszystkich VialControl.
+4.2. "File" → "Surrender":
+    - Wykonaj logikę zakończenia gry – np. wyświetl komunikat o przegranej lub zakończ rozgrywkę.
+4.3. "File" → "Exit Game":
+    - Zamknij aplikację (możesz użyć metod podobnych do opcji zamknięcia z poprzednich zadań).
+4.4. "Settings" → "Open Settings...":
+    - Otwórz okno dialogowe lub nowe okno, w którym użytkownik może ustawić opcje gry (np. zmiana MaxSegments, losowość kolorów, itp.).
+
+5. Ustawienie i pozycjonowanie VialControl
+------------------------------------------
+5.1. Upewnij się, że VialControl ma stałe wymiary (ustal MinimalSize i MaximumSize w Designerze).
+5.2. W obrębie TableLayoutPanel VialControl powinny być wyrównane do środka każdej komórki – możesz to osiągnąć, umieszczając je w panelach lub ustawiając odpowiednio właściwości Anchor.
+5.3. Podczas zmiany rozmiaru głównego okna, TableLayoutPanel automatycznie dostosowuje rozmiary komórek, a Twoje fiolki pozostają na środku.
+
+6. Implementacja logiki przelewania płynów
+------------------------------------------
+6.1. Inicjacja drag & drop:
+    - W metodzie MouseDown kontrolki VialControl:
+         if (e.Button == MouseButtons.Left)
+         {
+             // Sprawdź stan fiolki – pobierz kolor z górnego segmentu, określ ile segmentów o tym samym kolorze jest dostępnych
+             // Rozpocznij operację drag, np.:
+             this.DoDragDrop(new PotionDragData { Color = topSegmentColor, Count = availableCount }, DragDropEffects.Move);
+         }
+    - Utwórz pomocniczą klasę/strukturę PotionDragData, która przechowuje informacje o przepływającym płynie.
+6.2. W obsłudze DragEnter (dla docelowej VialControl):
+         - Sprawdź, czy dane, które są przeciągane (e.Data), są typu PotionDragData.
+         - Ustaw e.Effect = DragDropEffects.Move, jeśli warunki pozwalają na przelew (np. wystarczająca ilość wolnych segmentów lub zgodny kolor).
+6.3. W obsłudze DragDrop:
+         - Pobierz przesyłane dane (PotionDragData).
+         - Sprawdź, czy fiolka docelowa przyjmuje płyn (czy jest pusta albo czy górny kolor jest zgodny).
+         - Jeśli warunki są spełnione, przelej liquid:
+             * Usuwaj segmenty z fiolki źródłowej.
+             * Dodawaj segmenty do fiolki docelowej, dodając maksymalnie możliwą liczbę segmentów jednocześnie.
+         - Wywołaj Invalidate() na obu kontrolkach, aby zaktualizować ich wygląd.
+
+7. Testowanie i poprawki
+-------------------------
+7.1. Uruchom aplikację i sprawdź, czy:
+     - Główne okno ma wymagany rozmiar i tytuł, a menu oraz obszar gry są poprawnie rozmieszczone.
+     - VialControl poprawnie rysuje fiolkę podzieloną na MaxSegments segmentów.
+     - Właściwości (MaxSegments, InitSegmentCount, Segments) są widoczne i edytowalne w Properties Window.
+7.2. Testuj funkcjonalność drag & drop:
+     - Przeciągnij płyn z jednej fiolki do drugiej.
+     - Sprawdź, czy płyn przelewa się tylko wtedy, gdy docelowa fiolka ma wystarczająco wolnego miejsca lub zawiera ten sam kolor.
+     - Upewnij się, że zawsze przelewana jest maksymalna możliwa liczba segmentów.
+7.3. Przetestuj działanie opcji w menu:
+     - "New Game" powinno resetować stan gry.
+     - "Surrender" oraz "Exit Game" powinny kończyć rozgrywkę zgodnie z przyjętą logiką.
+     - "Open Settings..." powinno otwierać okno ustawień (jeśli zostało zaimplementowane).
+
+8. Dodatkowe uwagi
+------------------
+8.1. W metodzie OnPaint w VialControl użyj:
+     - Graphics.DrawRectangle do narysowania obrysu fiolki.
+     - Graphics.FillRectangle (z SolidBrush) do narysowania poszczególnych segmentów (kolorowych części).
+8.2. Do obsługi drag & drop używaj:
+     - Eventów MouseDown, DragEnter i DragDrop.
+8.3. Upewnij się, że właściwości i logika przelewania płynu działają spójnie przy zmianie rozmiaru okna – wykorzystaj zdarzenie Resize, jeśli to konieczne.
+8.4. Na każdym etapie warto dodawać logi lub tymczasowe komunikaty, aby łatwiej zlokalizować ewentualne błędy.
+
+=========================================================
+Koniec instrukcji implementacji "Potion Master"
+=========================================================
