@@ -1,0 +1,298 @@
+Instrukcja krok po kroku do zadania "MiNIPotter Library" w WPF (szczegółowa wersja):
+
+## 1. Przygotowanie środowiska
+1.1. Otwórz Visual Studio 2022 (lub nowsze) i wczytaj rozwiązanie z dwoma projektami:
+   - **MiNIPotter** (Application typu WPF)
+   - **Potter.API** (Class Library z modelem i interfejsem repozytorium)
+1.2. Upewnij się, że wersja .NET w obydwu projektach to minimum .NET 6.0.
+1.3. W projekcie **MiNIPotter**:
+   - Kliknij prawym przyciskiem na **Dependencies** → **Add Project Reference** → zaznacz **Potter.API**.
+   - Dodaj także NuGet package **CommunityToolkit.Mvvm** (wersja >=8.0.0) do wsparcia MVVM.
+
+## 2. Struktura katalogów
+2.1. W projekcie **MiNIPotter** utwórz foldery:
+   - **Assets** (grafiki, czcionki)
+   - **ViewModels** (klasy VM)
+   - **Models** (kopie modelu z Potter.API, jeśli potrzebujesz rozszerzeń)
+   - **Services** (implementacje repozytoriów i serwisów)
+   - **Converters** (klasy konwerterów)
+   - **Resources/Styles** (kolory, style, templaty)
+
+## 3. Zasoby graficzne i czcionka
+3.1. Skopiuj do folderu **Assets**:
+   - `potter.png` (ikonka okna)
+   - `HarryPotter-Regular.ttf` (czcionka)
+3.2. Zaznacz w **Properties** dla obu: **Build Action = Resource**, **Copy to Output Directory = Do not copy**.
+3.3. W **App.xaml** dodaj rejestrację czcionki:
+```xml
+<Application.Resources>
+  <FontFamily x:Key="HPFont">/MiNIPotter;component/Assets/#Harry Potter</FontFamily>
+</Application.Resources>
+```
+
+## 4. Definicja styli i kolorów
+4.1. Utwórz plik **Resources/Styles/Colors.xaml**:
+```xml
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="PrimaryBackgroundBrush" Color="#1E1E1E"/>
+  <SolidColorBrush x:Key="PrimaryForegroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#2D2D30"/>
+  <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#D4D4D4"/>
+</ResourceDictionary>
+```
+4.2. W **App.xaml** zaimportuj:
+```xml
+<Application.Resources>
+  <ResourceDictionary>
+    <ResourceDictionary.MergedDictionaries>
+      <ResourceDictionary Source="Resources/Styles/Colors.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+  </ResourceDictionary>
+</Application.Resources>
+```
+
+## 5. Model i Serwis danych
+5.1. W bibliotece **Potter.API** upewnij się, że masz:
+```csharp
+public class Chapter
+{
+    public string Title { get; set; }
+    public string Summary { get; set; }
+    public int Rating { get; set; }
+}
+public class Book
+{
+    public string Title { get; set; }
+    public string Author { get; set; }
+    public int Pages { get; set; }
+    public DateTime ReleaseDate { get; set; }
+    public string Cover { get; set; }
+    public string Dedication { get; set; }
+    public string Summary { get; set; }
+    public ObservableCollection<Chapter> Chapters { get; set; }
+}
+public interface IBooksRepository
+{
+    Task<IEnumerable<Book>> GetAllBooksAsync();
+}
+```
+5.2. W folderze **Services** utwórz implementację:
+```csharp
+public class BooksRepository : IBooksRepository
+{
+    private readonly string _dataUrl = "https://api.miNIPotter.local/books";
+    public async Task<IEnumerable<Book>> GetAllBooksAsync()
+    {
+        using var client = new HttpClient();
+        var json = await client.GetStringAsync(_dataUrl);
+        return JsonSerializer.Deserialize<List<Book>>(json);
+    }
+}
+```
+
+## 6. ViewModel
+6.1. Dodaj klasę **BookViewModel** w folderze **ViewModels**:
+```csharp
+public class BookViewModel : ObservableObject
+{
+    private readonly IBooksRepository _repository;
+    public ObservableCollection<Book> Books { get; } = new();
+    private Book _selectedBook;
+    public Book SelectedBook
+    {
+        get => _selectedBook;
+        set => SetProperty(ref _selectedBook, value);
+    }
+    public IRelayCommand LoadBooksCommand { get; }
+
+    public BookViewModel(IBooksRepository repository)
+    {
+        _repository = repository;
+        LoadBooksCommand = new RelayCommand(async () => await LoadBooksAsync());
+    }
+
+    private async Task LoadBooksAsync()
+    {
+        try
+        {
+            var all = await _repository.GetAllBooksAsync();
+            Books.Clear();
+            foreach (var b in all) Books.Add(b);
+            SelectedBook = Books.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            // TODO: logowanie / komunikat dla użytkownika
+        }
+    }
+}
+```
+6.2. Dodaj `using CommunityToolkit.Mvvm.Input;` i `CommunityToolkit.Mvvm.ComponentModel;`.
+
+## 7. Ustawienia MainWindow
+7.1. **MainWindow.xaml**:
+```xml
+<Window x:Class="MiNIPotter.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        Background="{StaticResource PrimaryBackgroundBrush}"
+        Foreground="{StaticResource PrimaryForegroundBrush}"
+        Title="MiNIPotter Library"
+        Width="1200" Height="800"
+        MinWidth="1000" MinHeight="600"
+        Icon="Assets/potter.png">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+    <!-- Banner -->
+    <TextBlock Grid.Row="0" Text="MiNIPotter Library"
+               FontFamily="{StaticResource HPFont}"
+               FontSize="40" FontWeight="Bold"
+               HorizontalAlignment="Center"
+               Margin="0,16"/>
+    <!-- Przyciski -->
+    <Button Grid.Row="1" Content="🗲 Załaduj dane"
+            Command="{Binding LoadBooksCommand}"
+            FontSize="16" FontWeight="Bold"
+            Background="{StaticResource SecondaryBackgroundBrush}"
+            Foreground="{StaticResource SecondaryForegroundBrush}"
+            Width="200" Height="40" HorizontalAlignment="Center"
+            Margin="0,8"/>
+    <!-- Główna zawartość -->
+    <Grid Grid.Row="2" Margin="16">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="400"/>
+        <ColumnDefinition Width="16"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <!-- Lista książek -->
+      <ListBox Grid.Column="0"
+               ItemsSource="{Binding Books}"
+               SelectedItem="{Binding SelectedBook}"
+               Background="{StaticResource SecondaryBackgroundBrush}"
+               BorderThickness="0"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <Border Padding="8" Margin="4" CornerRadius="4" Background="{StaticResource PrimaryBackgroundBrush}">
+              <StackPanel>
+                <Image Source="{Binding Cover}" Width="100" Height="150" Stretch="UniformToFill"/>
+                <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="Bold" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                <TextBlock Text="{Binding Author}" FontSize="12" Margin="0,2"/>
+                <DockPanel Margin="0,4,0,0">
+                  <TextBlock Text="{Binding Pages}" FontSize="12" DockPanel.Dock="Left"/>
+                  <TextBlock Text="{Binding ReleaseDate, StringFormat=d MMMM yyyy}" FontSize="12" DockPanel.Dock="Right"/>
+                </DockPanel>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <!-- Szczegóły książki -->
+      <Grid Grid.Column="2">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="200"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="8">
+            <TextBlock Text="{Binding SelectedBook.Dedication}" FontStyle="Italic" FontWeight="DemiBold" FontSize="14" Margin="0,4"/>
+            <TextBlock Text="{Binding SelectedBook.Author}" TextAlignment="Right" FontSize="14" Margin="0,4"/>
+            <TextBlock Text="{Binding SelectedBook.Summary}" FontStyle="Italic" TextWrapping="Wrap" FontSize="14" Margin="0,4"/>
+            <TextBlock Text="{Binding SelectedBook.Chapters, Converter={StaticResource AverageRatingConverter}, StringFormat='Ocena średnia: {0:N1}'}" FontSize="14" Margin="0,4"/>
+          </StackPanel>
+        </ScrollViewer>
+        <Image Grid.Row="1" Source="{Binding SelectedBook.Cover}" Stretch="UniformToFill" Margin="8"/>
+        <!-- Lista rozdziałów -->
+        <ListBox Grid.Row="2"
+                 ItemsSource="{Binding SelectedBook.Chapters}"
+                 Background="{StaticResource SecondaryBackgroundBrush}"
+                 BorderThickness="0"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+          <ListBox.Header>
+            <TextBlock Text="Rozdziały" FontSize="20" FontWeight="Bold" Margin="8"/>
+          </ListBox.Header>
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Expander Header="{Binding Title}" FontSize="14" FontWeight="DemiBold" IsExpanded="False" Margin="4">
+                <StackPanel Margin="8">
+                  <TextBlock Text="{Binding Summary}" FontStyle="Italic" TextWrapping="Wrap" Margin="0,2"/>
+                  <TextBlock Text="{Binding Rating, Converter={StaticResource StarsConverter}}" FontSize="16"/>
+                </StackPanel>
+              </Expander>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>
+```
+
+## 8. Konwertery
+### 8.1. AverageRatingConverter
+```csharp
+public class AverageRatingConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var chapters = value as IEnumerable<Chapter>;
+        if (chapters == null || !chapters.Any()) return 0;
+        return Math.Round(chapters.Average(c => c.Rating), 1);
+    }
+    public object ConvertBack(...) => throw new NotImplementedException();
+}
+```
+### 8.2. StarsConverter
+```csharp
+public class StarsConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        int rating = (int)value;
+        int fullStars = rating;
+        StringBuilder sb = new();
+        for (int i = 0; i < 10; i++)
+            sb.Append(i < fullStars ? '★' : '☆');
+        return sb.ToString();
+    }
+    public object ConvertBack(...) => throw new NotImplementedException();
+}
+```
+8.3. Zarejestruj w **Window.Resources**:
+```xml
+<Window.Resources>
+    <local:AverageRatingConverter x:Key="AverageRatingConverter"/>
+    <local:StarsConverter x:Key="StarsConverter"/>
+</Window.Resources>
+```
+
+## 9. Podłączenie ViewModel do MainWindow
+W **MainWindow.xaml.cs**:
+```csharp
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+        DataContext = new BookViewModel(new BooksRepository());
+    }
+}
+```
+
+## 10. Testy i debugowanie
+10.1. Sprawdź, czy po kliknięciu przycisku dane są pobierane (breakpoint w LoadBooksAsync).  
+10.2. Symuluj błąd HTTP (np. wyłącz API) i zweryfikuj brak wyjątku (obsługa w catch).  
+10.3. Zmień rozmiar okna i sprawdź, czy wszystkie ScrollViewer działają.
+
+## 11. Dodatkowe uwagi
+- Możesz dodać `ProgressRing` lub `ProgressBar` podczas ładowania danych.  
+- Rozważ obsługę `CancellationToken` w LoadBooksAsync.  
+- Dodaj `ICommand` do sortowania i filtrowania listy książek.
+
+## 12. Podsumowanie
+Po przejściu przez wszystkie kroki aplikacja będzie kompletna, responsywna i zgodna z praktykami MVVM.

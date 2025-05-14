@@ -1,0 +1,129 @@
+Instrukcja krok po kroku do zadania "MiNIPotter Library" w WPF:
+
+1. Przygotowanie rozwiązania
+   1.1. Otwórz przekazane rozwiązanie zawierające projekty MiNIPotter (WPF Application) i Potter.API (Class Library).
+   1.2. W projekcie MiNIPotter dodaj referencję do Potter.API (prawy klik na Dependencies → Add Reference).
+
+2. Dodanie zasobów do projektu
+   2.1. Skopiuj pliki potter.png (ikonka okna) oraz HarryPotter-Regular.ttf (czcionka) do folderu Assets w projekcie MiNIPotter.
+   2.2. W Properties ustaw dla obu plików Build Action = Resource.
+
+3. Ustawienia głównego okna (MainWindow.xaml)
+   3.1. Nadaj rozmiary:
+        Width="1200" Height="800"
+        MinWidth="1000" MinHeight="600"
+   3.2. Ustaw tytuł i kolory:
+        Title="MiNIPotter Library"
+        Background="{DynamicResource PrimaryBackgroundBrush}"
+        Foreground="{DynamicResource PrimaryForegroundBrush}"
+        Icon="Assets/potter.png"
+   3.3. Wczytaj zasoby kolorów i stylów na poziomie App.xaml:
+        <Application.Resources>
+          <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+              <ResourceDictionary Source="Styles/Colors/Colors.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+          </ResourceDictionary>
+        </Application.Resources>
+
+4. Banner z czcionką HarryPotter
+   4.1. Zarejestruj czcionkę w App.xaml:
+        <FontFamily x:Key="HPFont">/Assets/#Harry Potter</FontFamily>
+   4.2. W górnej części MainWindow dodaj TextBlock:
+        <TextBlock Text="MiNIPotter Library"
+                   FontFamily="{StaticResource HPFont}"
+                   FontSize="40"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+
+5. Przycisk ładowania danych
+   5.1. Pod bannerem umieść Button:
+        <Button Content="🗲 Załaduj dane"
+                FontSize="16" FontWeight="Bold"
+                Background="{DynamicResource SecondaryBackgroundBrush}"
+                Foreground="{DynamicResource SecondaryForegroundBrush}"
+                Command="{Binding LoadBooksCommand}"/>
+   5.2. W BookViewModel zaimplementuj ICommand LoadBooksCommand, który wywołuje asynchronicznie LoadBooksAsync().
+
+6. DataContext głównego okna
+   6.1. W code-behind (MainWindow.xaml.cs) ustaw:
+        public MainWindow() {
+          InitializeComponent();
+          DataContext = new BookViewModel(new BooksRepository());
+        }
+
+7. Lista powieści
+   7.1. Po lewej stronie dodaj ListBox Width="400" z:
+        <ListBox Background="{DynamicResource SecondaryBackgroundBrush}"
+                 ScrollViewer.VerticalScrollBarVisibility="Visible"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ItemsSource="{Binding Books}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="8" Margin="4">
+                <StackPanel>
+                  <Image Source="{Binding Cover}" Width="100" Stretch="Uniform"/>
+                  <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding Author}" FontSize="10"/>
+                  <DockPanel LastChildFill="False" Margin="0,8,0,0">
+                    <TextBlock Text="{Binding Pages}" FontSize="12" DockPanel.Dock="Left"/>
+                    <TextBlock Text="{Binding ReleaseDate, StringFormat=d MMMM yyyy}" FontSize="12" DockPanel.Dock="Right"/>
+                  </DockPanel>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+   7.2. Powiąż SelectedItem z właściwością SelectedBook w BookViewModel.
+
+8. Szczegóły wybranej powieści
+   8.1. Obok listy powieści umieść Grid z dwiema kolumnami (* i *).
+   8.2. W lewej kolumnie (ScrollViewer → StackPanel) dodaj:
+        - TextBlock z dedykacją: FontSize="14" FontStyle="Italic" FontWeight="DemiBold" Text="{Binding SelectedBook.Dedication}"
+        - TextBlock z autorem: FontSize="14" TextAlignment="Right" Text="{Binding SelectedBook.Author}"
+        - TextBlock z opisem: FontSize="14" FontStyle="Italic" TextWrapping="Wrap" Text="{Binding SelectedBook.Summary}"
+        - TextBlock ze średnią oceną: FontSize="14" Text="{Binding SelectedBook.Chapters, Converter={StaticResource AverageRatingConverter}, StringFormat='Ocena: {0}'}"
+   8.3. W prawej kolumnie dodaj Image:
+        <Image Source="{Binding SelectedBook.Cover}" Stretch="UniformToFill"/>
+
+9. Lista rozdziałów
+   9.1. Pod szczegółami dodaj ListBox:
+        <ListBox Background="{DynamicResource SecondaryBackgroundBrush}"
+                 ItemsSource="{Binding SelectedBook.Chapters}">
+          <ListBox.Header>
+            <TextBlock Text="Rozdziały" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+          </ListBox.Header>
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Expander Header="{Binding Title}" FontSize="14" FontWeight="DemiBold" IsExpanded="False">
+                <StackPanel Margin="8">
+                  <TextBlock Text="{Binding Summary}" FontSize="12" FontStyle="Italic" TextWrapping="Wrap"/>
+                  <TextBlock>
+                    <TextBlock.Text>
+                      <MultiBinding Converter="{StaticResource StarsConverter}">
+                        <Binding Path="Rating"/>
+                      </MultiBinding>
+                    </TextBlock.Text>
+                  </TextBlock>
+                </StackPanel>
+              </Expander>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+10. Implementacja konwerterów
+    10.1. AverageRatingConverter (IValueConverter): oblicza średnią ocenę rozdziałów i zwraca liczbę gwiazdek.
+    10.2. StarsConverter (IMultiValueConverter): tworzy ciąg gwiazdek ★ i ☆ oraz ustawia kolor gwiazdek.
+
+11. Podłączenie konwerterów w XAML
+    <Window.Resources>
+      <local:AverageRatingConverter x:Key="AverageRatingConverter"/>
+      <local:StarsConverter x:Key="StarsConverter"/>
+    </Window.Resources>
+
+12. Testowanie działania
+    12.1. Uruchom aplikację.
+    12.2. Kliknij "🗲 Załaduj dane" i sprawdź wypełnienie listy.
+    12.3. Zaznacz książki i zweryfikuj szczegóły oraz listę rozdziałów.
+    12.4. Zmień rozmiar okna i przetestuj przewijanie.
