@@ -1,0 +1,202 @@
+Instrukcja krok po kroku do zadania „WPF – Część Laboratoryjna: Czat Grupowy”
+
+## 1. Utworzenie projektu
+1.1. W Visual Studio wybierz **File → New → Project → WPF App (.NET)**.  
+1.2. Nazwij projekt `GroupChatLab` i upewnij się, że target to .NET 6.0 lub nowszy.  
+1.3. Ustaw docelowy rozmiar okna w `MainWindow.xaml`:
+```xml
+<Window x:Class="GroupChatLab.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        Title="Group Chat Lab"
+        Width="800" Height="480"
+        MinWidth="420" MinHeight="240">
+```
+
+## 2. Układ aplikacji (1 punkt)
+2.1. W `MainWindow.xaml` stwórz główny **Grid** z trzema wierszami:
+```xml
+<Grid.RowDefinitions>
+    <RowDefinition Height="Auto"/>  <!-- Menu -->
+    <RowDefinition Height="*"/>     <!-- Obszar wiadomości -->
+    <RowDefinition Height="Auto"/>  <!-- Panel wprowadzania tekstu -->
+</Grid.RowDefinitions>
+```
+
+## 3. Pasek menu (1 punkt)
+3.1. Dodaj wiersz menu:
+```xml
+<Menu Grid.Row="0">
+    <MenuItem Header="_File">
+        <MenuItem Header="_Connect" Name="MenuConnect" Click="MenuConnect_Click"/>
+        <MenuItem Header="_Disconnect" Name="MenuDisconnect" Click="MenuDisconnect_Click" IsEnabled="False"/>
+        <Separator/>
+        <MenuItem Header="E_xit" Click="MenuExit_Click"/>
+    </MenuItem>
+    <MenuItem Header="_Help">
+        <MenuItem Header="_About" Click="MenuAbout_Click"/>
+    </MenuItem>
+</Menu>
+```
+3.2. W code-behind (`MainWindow.xaml.cs`):
+```csharp
+private bool isConnected = false;
+
+private void UpdateMenuItems()
+{
+    MenuConnect.IsEnabled = !isConnected;
+    MenuDisconnect.IsEnabled = isConnected;
+}
+
+private void MenuConnect_Click(object sender, RoutedEventArgs e)
+{
+    isConnected = true;
+    AddSystemMessage("Connected");
+    UpdateMenuItems();
+}
+
+private void MenuDisconnect_Click(object sender, RoutedEventArgs e)
+{
+    isConnected = false;
+    AddSystemMessage("Disconnected");
+    UpdateMenuItems();
+}
+
+private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
+
+private void MenuAbout_Click(object sender, RoutedEventArgs e)
+{
+    MessageBox.Show("Group Chat Lab
+Author: Twoje Imię", "About");
+}
+```
+
+## 4. Obszar wiadomości (4 punkty)
+4.1. W drugim wierszu `Grid` dodaj:
+```xml
+<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+    <ItemsControl Name="MessagesControl" ItemsSource="{Binding Messages}">
+        <ItemsControl.ItemTemplateSelector>
+            <local:MessageTemplateSelector 
+                UserTemplate="{StaticResource UserMessageTemplate}" 
+                SystemTemplate="{StaticResource SystemMessageTemplate}"/>
+        </ItemsControl.ItemTemplateSelector>
+    </ItemsControl>
+</ScrollViewer>
+```
+4.2. W `Window.Resources` zdefiniuj `DataTemplate`:
+```xml
+<Window.Resources>
+  <!-- Wiadomość użytkownika -->
+  <DataTemplate x:Key="UserMessageTemplate">
+    <Border Background="DarkOrange" CornerRadius="8" Padding="8" Margin="4"
+            HorizontalAlignment="{Binding Alignment}">
+      <StackPanel>
+        <TextBlock Text="{Binding Sender}" FontWeight="Bold" Foreground="White"/>
+        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="White"/>
+        <TextBlock Text="{Binding TimeDisplay}" FontSize="10" HorizontalAlignment="Right"
+                   Foreground="LightGray" ToolTip="{Binding TimeExact}"/>
+      </StackPanel>
+    </Border>
+  </DataTemplate>
+  <!-- Wiadomość systemowa -->
+  <DataTemplate x:Key="SystemMessageTemplate">
+    <TextBlock Text="{Binding Text}" Foreground="DarkGray" 
+               HorizontalAlignment="Center" FontStyle="Italic" Margin="4"/>
+  </DataTemplate>
+</Window.Resources>
+```
+4.3. Utwórz klasę `Message`:
+```csharp
+public enum MessageType { User, System }
+
+public class Message : INotifyPropertyChanged
+{
+    public string Sender { get; set; }
+    public string Text { get; set; }
+    public DateTime Timestamp { get; set; }
+    public MessageType Type { get; set; }
+    public int Index { get; set; }
+
+    public HorizontalAlignment Alignment =>
+        Type == MessageType.User
+        ? (Index % 2 == 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right)
+        : HorizontalAlignment.Center;
+
+    public string TimeDisplay => GetRelativeTime(Timestamp);
+    public string TimeExact => Timestamp.ToString("dd/MM/yyyy HH:mm:ss");
+
+    public event PropertyChangedEventHandler PropertyChanged;
+    public void OnPropertyChanged(string prop) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+
+    private string GetRelativeTime(DateTime time)
+    {
+        var span = DateTime.Now - time;
+        if (span < TimeSpan.FromMinutes(1)) return "Now";
+        if (span < TimeSpan.FromMinutes(15)) return $"{(int)span.TotalMinutes}m ago";
+        if (span < TimeSpan.FromDays(1)) return time.ToString("HH:mm");
+        return time.ToString("dd/MM/yyyy");
+    }
+}
+```
+4.4. W `MainWindow` dodaj `ObservableCollection<Message> Messages` i ustaw `DataContext = this;`.
+
+4.5. Dodaj `DispatcherTimer` dla dynamicznej aktualizacji:
+```csharp
+var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+timer.Tick += (s, e) =>
+{
+    foreach (var msg in Messages)
+        msg.OnPropertyChanged(nameof(msg.TimeDisplay));
+};
+timer.Start();
+```
+
+## 5. Obszar wprowadzania tekstu (2 punkty)
+5.1. W trzecim wierszu **Grid**:
+```xml
+<DockPanel Grid.Row="2" Margin="4">
+    <TextBox Name="InputBox" AcceptsReturn="True"
+             VerticalScrollBarVisibility="Disabled"
+             TextWrapping="Wrap" MinHeight="30"
+             KeyDown="InputBox_PreviewKeyDown" DockPanel.Dock="Left"/>
+    <Button Content="Send" Click="SendButton_Click"
+            DockPanel.Dock="Right" Margin="4,0"/>
+</DockPanel>
+```
+5.2. W code-behind:
+```csharp
+private int messageCount = 0;
+
+private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
+{
+    if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+    {
+        e.Handled = true;
+        SendMessage();
+    }
+}
+
+private void SendButton_Click(object sender, RoutedEventArgs e) => SendMessage();
+
+private void SendMessage()
+{
+    if (string.IsNullOrWhiteSpace(InputBox.Text)) return;
+    var msg = new Message
+    {
+        Sender = $"User{(messageCount % 2 + 1)}",
+        Text = InputBox.Text,
+        Timestamp = DateTime.Now,
+        Type = MessageType.User,
+        Index = messageCount++
+    };
+    Messages.Add(msg);
+    InputBox.Clear();
+}
+```
+
+## 6. Podsumowanie
+- **Layout**: Menu + ScrollViewer/ItemsControl + panel wpisywania.  
+- **Menu**: Connect/Disconnect/Exit, About.  
+- **Wiadomości**: Dymki z dynamicznym czasem, tooltipem, naprzemienne wyrównanie.  
+- **Input**: Enter wysyła, Shift+Enter nowa linia, pole rośnie w pionie.
